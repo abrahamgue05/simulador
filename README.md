@@ -57,4 +57,4 @@ El objetivo de esta fase es recibir el código fuente del usuario, limpiarlo, to
    - **Número:** Todos sus caracteres son dígitos del `0` al `9`.
    *Si no cumple ninguna, se lanza un **Error de Sintaxis**.*
 6. **Almacenamiento:** Si la línea supera todos los filtros, se añade al vector `programaTxt` para su posterior ensamblado.
-7. **Validación de Terminador (Safe Exit):** Al finalizar la captura de datos, el parser verifica la existencia obligatoria de la instrucción `HLT` (o `0`). Si se omite, el simulador aborta la ejecución para prevenir desbordamientos de memoria.
+7. **Validación de Terminador (Safe Exit):** Al finalizar la captura de datos, el parser verifica la existencia obligatoria de la instrucción `HLT` (o `0`). Si se omite, el simulador aborta la ejecución para prevenir desbordamientos de memoria.g
