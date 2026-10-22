@@ -46,7 +46,7 @@ Simulador de microprocesador de arquitectura de 8 bits basado en un ciclo clási
 
 ## 🚀 Compilación y Ejecución
 
-El código está escrito en **C++17** estándar y utiliza librerías nativas (`<thread>`, `<chrono>`, `<vector>`, etc.), por lo que no requiere dependencias externas ni gestores de paquetes complejos.
+Código escrito en **C++17** estándar y utiliza librerías nativas (`<thread>`, `<chrono>`, `<vector>`, etc.), no requiere dependencias externas ni gestores de paquetes complejos.
 
 ### Compilar con GCC / Clang:
 ```bash
@@ -58,7 +58,7 @@ g++ -std=c++17 -O3 SimuladorPt3.cpp -o cpu_simulator
 ./cpu_simulator
 ```
 
-## 🧪 Programa de Prueba Sugerido
+## 🧪 Programa Sugerido
 
 Al iniciar el programa, puedes copiar y pegar este bloque completo directamente en tu terminal:
 
@@ -83,8 +83,8 @@ CMP AX, 5
 HLT
 ```
 
-### ¿Qué verás en pantalla?
-Un **Dashboard de Hardware en cascada** impreso instrucción por instrucción que se ve así:
+### ¿Qué se vera en pantalla?
+Un **Dashboard cascada** impreso instrucción por instrucción que se ve así:
 ```text
 PC: [1] | MAR: [0] | MDR: [100] | IR: [11, 100]
 Z: 0 | N: 0 | C: 0 | O: 0
@@ -92,4 +92,4 @@ AX: 100 | BX: 0 | CX: 0
 BP: 248 | SP: 255 | Uso de Pila: 0.0%
 --------------------------------------------------
 ```
-Y reportes en tiempo real cada vez que la **ALU** procese matemáticas o la **Pila** mueva datos (`[STACK] -> PUSH / POP`).
+Reportes **ALU** y **Pila**
