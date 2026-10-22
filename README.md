@@ -84,7 +84,7 @@ HLT
 ```
 
 ### ¿Qué se vera en pantalla?
-Un **Dashboard cascada** impreso instrucción por instrucción que se ve así:
+**Dashboard cascada**
 ```text
 PC: [1] | MAR: [0] | MDR: [100] | IR: [11, 100]
 Z: 0 | N: 0 | C: 0 | O: 0
