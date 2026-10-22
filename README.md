@@ -1,6 +1,6 @@
 # 🖥️ Simulador de CPU de 8 bits en C++
 
-Un simulador de microprocesador de arquitectura de 8 bits basado en un ciclo clásico **Fetch-Decode-Execute (F-D-E)**. Cuenta con un ensamblador de texto personalizado, gestión de memoria virtual (MMU), una Unidad Aritmética y Lógica (ALU) con banderas de estado en vivo, gestión de pila (`PUSH`/`POP`), y un panel de control interactivo (*Dashboard*) en tiempo real.
+Simulador de microprocesador de arquitectura de 8 bits basado en un ciclo clásico **Fetch-Decode-Execute (F-D-E)**. Cuenta con un ensamblador de texto personalizado, gestión de memoria virtual (MMU), una Unidad Aritmética y Lógica (ALU) con banderas de estado en vivo, gestión de pila (`PUSH`/`POP`), y un panel de control interactivo (*Dashboard*) en tiempo real.
 
 ---
 
@@ -50,20 +50,13 @@ El código está escrito en **C++17** estándar y utiliza librerías nativas (`<
 
 ### Compilar con GCC / Clang:
 ```bash
-g++ -std=c++17 -O3 SimuladorPtcha_2.cpp -o cpu_simulator
+g++ -std=c++17 -O3 SimuladorPt3.cpp -o cpu_simulator
 ```
 
 ### Ejecutar el Simulador:
 ```bash
 ./cpu_simulator
 ```
-
-*(Opcional)* Puedes ajustar la velocidad del reloj de la CPU modificando la directiva al inicio del archivo o compilando con un retraso personalizado en milisegundos:
-```bash
-g++ -std=c++17 -DRETRASO_MS=500 SimuladorPtcha_2.cpp -o cpu_simulator
-```
-
----
 
 ## 🧪 Programa de Prueba Sugerido
 
