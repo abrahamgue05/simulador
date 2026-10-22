@@ -20,7 +20,7 @@ using namespace std; // std
 // uint8_t: Entero sin signo de 8 bits (solo valores positivos: 0 a 255)
 // int8_t: Entero con signo de 8 bits (valores positivos y negativos: -128 a 127)
 
-uint8_t RAM[256][2]; // 128 Instr, 128 Datos. Col0: OpCode, Col1: Operando
+uint8_t RAM[256][2]; // 128 Instr (0-127), 128 Datos (128-255). Col0: OpCode, Col1: Operando
 
 // Registros generales
 int8_t AX;
@@ -44,9 +44,11 @@ string palabraOpCode;   // Guarda la instruccion (ej: "MOV")
 string palabraDestino;  // Guarda 1er operando (ej: "AX")
 string palabraOrigen;   // Guarda 2do operando (ej: "06A")
 
+vector<string> programaTxt; // Guarda historial de las lineas ya validadas (Global para Paso 2)
+
 
 // 000000000
-// Funciones
+// Funciones de Validacion (Helpers)
 // 000000000
 
 // Verifica si el texto contiene solo numeros (para valores decimales)
@@ -54,6 +56,28 @@ bool esNumero(const string& str) {
     if (str.empty()) return false;
     for (char const &c : str) {
         if (!isdigit(c)) return false;
+    }
+    return true;
+}
+
+// Revisa si el operando es un registro valido del CPU
+bool esRegistro(const string& str) {
+    return (str == "AX" || str == "BX" || str == "CX");
+}
+
+// Asigna un numero identificador unico a cada registro
+int obtenerIdRegistro(const string& str) {
+    if (str == "AX") return 1;
+    if (str == "BX") return 2;
+    if (str == "CX") return 3;
+    return 0;
+}
+
+// Valida si el operando es una direccion de memoria hexadecimal valida (ej: 06A)
+bool esMemoria(const string& str) {
+    if (str.length() != 3 || str[0] != '0') return false;
+    for (char const &c : str) {
+        if (!isxdigit(c)) return false;
     }
     return true;
 }
@@ -68,22 +92,22 @@ bool validarInstruccion(const string& op) {
     return false;
 }
 
-// Acepta direcciones de memoria (inicia con 0 y 3 chars), Registros o numeros decimales
+// Acepta direcciones de memoria, Registros o numeros decimales
 bool validarOperando(const string& op) {
     if (op.empty()) return true;
-    if (op.length() == 3 && op[0] == '0') return true;
-    if (op == "AX" || op == "BX" || op == "CX") return true;
+    if (esMemoria(op)) return true;
+    if (esRegistro(op)) return true;
     if (esNumero(op)) return true;
     return false;
 }
 
 
 //000000000000000000000000000000000
-// Paso 1. Lectura de instrucciones
+// Paso 1. Lectura de instrucciones (Parser)
 //000000000000000000000000000000000
 
 void paso1_Lectura() {
-    vector<string> programaTxt; // Guarda historial de las lineas ya validadas
+    programaTxt.clear(); // Limpiar historial viejo por si se hacen varias pruebas
     bool tieneHLT = false; // Bandera para saber si el programa tiene un final seguro
 
     // Bucle limitado a 128 lugares (limite de memoria para instrucciones)
@@ -91,9 +115,7 @@ void paso1_Lectura() {
         getline(cin, entradaUsuario); // Leer linea cruda desde el teclado
 
         // Ignorar lineas completamente vacias (ej: enter accidental)
-        if (entradaUsuario.empty()) {
-            continue;
-        }
+        if (entradaUsuario.empty()) continue;
 
         // Reemplazar comas por espacios para facilitar el corte de operandos
         replace(entradaUsuario.begin(), entradaUsuario.end(), ',', ' ');
@@ -107,25 +129,23 @@ void paso1_Lectura() {
             tokens.push_back(token);
         }
 
-        // Prevenir crasheo del programa si el usuario solo tecleo espacios en blanco
-        if (tokens.empty()) {
-            continue;
-        }
+        // Prevenir crasheo del programa si el usuario solo tecleo espacios
+        if (tokens.empty()) continue;
 
         palabraOpCode = tokens[0]; // 1ra palabra: Instruccion (ej: MOV)
         palabraDestino = (tokens.size() > 1) ? tokens[1] : ""; // 2da palabra: Destino (ej: AX)
         palabraOrigen = (tokens.size() > 2) ? tokens[2] : ""; // 3ra palabra: Origen (ej: 06A o 5)
 
-        // Verificar que la instruccion pertenezca a las 7 permitidas
+        // Verificar que la instruccion pertenezca a las permitidas
         if (!validarInstruccion(palabraOpCode)) {
-            cout << "Error de Sintaxis" << endl;
+            cout << "\n[!] Error de Sintaxis: Instruccion desconocida" << endl;
             isRunning = false;
             break;
         }
 
-        // Verificar que los operandos tengan sintaxis correcta (Reg, Mem o Num)
+        // Verificar que los operandos tengan sintaxis correcta
         if (!validarOperando(palabraDestino) || !validarOperando(palabraOrigen)) {
-            cout << "Error de Sintaxis" << endl;
+            cout << "\n[!] Error de Sintaxis: Operando invalido" << endl;
             isRunning = false;
             break;
         }
@@ -136,68 +156,142 @@ void paso1_Lectura() {
         // Detectar si la instruccion actual es el terminador de la maquina
         if (palabraOpCode == "HLT" || palabraOpCode == "0") {
             tieneHLT = true;
-            break; // Romper bucle de lectura, el programa termino
+            break;
         }
     }
 
     // Evitar desbordamiento si el usuario agota las 128 lineas sin poner HLT
     if (!tieneHLT && isRunning) {
-        cout << "Error" << endl;
-        isRunning = false;
+        cout << "\n[!] Advertencia: Limite de codigo alcanzado. Forzando HLT." << endl;
     }
 }
 
 
 //000000000000000000000000000000000
-// Menu Principal
+// Paso 2. Enviar a memoria (Ensamblado y MMU)
 //000000000000000000000000000000000
 
-void menuPrincipal() {
-    string opcion; // Guarda la eleccion del usuario
-    bool enMenu = true; // Control del ciclo del menu
+void paso2_Ensamblado() {
+    // Limpiar toda la zona de codigo de la RAM (0 a 127) con ceros por seguridad
+    for (int i = 0; i < 128; i++) {
+        RAM[i][0] = 0;
+        RAM[i][1] = 0;
+    }
 
-    // Mantener menu activo hasta que se elija Salir
-    while (enMenu) {
-        cout << "\n--- MENU SIMULADOR CPU ---" << endl;
-        cout << "1. Ver instrucciones permitidas" << endl;
-        cout << "2. Iniciar programa (Escribir codigo)" << endl;
-        cout << "3. Ver memoria actual" << endl;
-        cout << "4. Salir" << endl;
-        cout << "5. Imprimir un hola mundo en C++ yupiiii" << endl;
-        cout << "Elige una opcion: ";
+    // Recorrer el historial linea por linea para traducirlo a la matriz RAM
+    for (size_t i = 0; i < programaTxt.size(); i++) {
+        string linea = programaTxt[i];
+        stringstream ss(linea);
+        vector<string> tokens;
+        string token;
         
-        getline(cin, opcion); // Leer opcion como texto para evitar bug de Enter atorado
+        // Separar la instruccion en sus partes para traducir
+        while (ss >> token) tokens.push_back(token);
+        
+        string op = tokens[0];
+        string d = (tokens.size() > 1) ? tokens[1] : "";
+        string o = (tokens.size() > 2) ? tokens[2] : "";
 
-        if (opcion == "1") {
-            cout << "\n[Instrucciones]: MOV, HLT, DIV, JMP, JMA, CMP, SHL" << endl;
-            cout << "[Sintaxis]: INSTRUCCION DESTINO, ORIGEN (Ej: MOV AX, 0FF)" << endl;
-        } 
-        else if (opcion == "2") {
-            cout << "\n[Modo Programa]: Escribe tu codigo (Termina con HLT):" << endl;
-            paso1_Lectura(); // Llamar al traductor (Paso 1)
-        } 
-        else if (opcion == "3") {
-            cout << "\n[Memoria]: (Aun en construccion...)" << endl;
-        } 
-        else if (opcion == "4") {
-            cout << "\nSaliendo del simulador..." << endl;
-            enMenu = false; // Romper ciclo y cerrar programa
-        } 
-        else if (opcion == "5") {
-            cout << "\nHola mundo en C++ yupiiii" << endl;
-        } 
-        else {
-            cout << "\nOpcion no valida. Intenta de nuevo." << endl;
+        uint8_t opcode_num = 0;
+        uint8_t operando_num = 0;
+
+        // Traducir texto a OpCodes numericos y aplicar Offset (+128) si es memoria
+        if (op == "HLT" || op == "0") {
+            opcode_num = 0;
+            operando_num = 0;
         }
+        else if (op == "MOV") {
+            if (esRegistro(d) && esNumero(o)) {
+                opcode_num = 10 + obtenerIdRegistro(d); // Fusionar registro en OpCode (11, 12, 13)
+                operando_num = stoi(o);
+            }
+            else if (esRegistro(d) && esMemoria(o)) {
+                opcode_num = 20 + obtenerIdRegistro(d); 
+                operando_num = stoi(o, nullptr, 16) + 128; // Aplicar Memoria Virtual (+128)
+            }
+            else if (esMemoria(d) && esRegistro(o)) {
+                opcode_num = 30 + obtenerIdRegistro(o); 
+                operando_num = stoi(d, nullptr, 16) + 128; // Aplicar Memoria Virtual (+128)
+            }
+            else if (esRegistro(d) && esRegistro(o)) {
+                opcode_num = 40 + obtenerIdRegistro(d); 
+                operando_num = obtenerIdRegistro(o);
+            }
+        }
+        else if (op == "DIV") {
+            if (esRegistro(d) && esNumero(o)) {
+                opcode_num = 50 + obtenerIdRegistro(d); 
+                operando_num = stoi(o);
+            }
+            else if (esMemoria(d)) { 
+                opcode_num = 60; 
+                operando_num = stoi(d, nullptr, 16) + 128; // Aplicar Memoria Virtual (+128)
+            }
+        }
+        else if (op == "CMP") {
+            if (esRegistro(d) && esNumero(o)) {
+                opcode_num = 70 + obtenerIdRegistro(d); 
+                operando_num = stoi(o);
+            }
+            else if (esRegistro(d) && esMemoria(o)) {
+                opcode_num = 80 + obtenerIdRegistro(d); 
+                operando_num = stoi(o, nullptr, 16) + 128; // Aplicar Memoria Virtual (+128)
+            }
+        }
+        else if (op == "JMP") {
+            opcode_num = 90; 
+            operando_num = stoi(d); // Los saltos ignoran el offset porque apuntan a codigo
+        }
+        else if (op == "JMA") {
+            opcode_num = 91;
+            operando_num = stoi(d); // Los saltos ignoran el offset porque apuntan a codigo
+        }
+        else if (op == "SHL") {
+            if (esRegistro(d) && esNumero(o)) {
+                opcode_num = 100 + obtenerIdRegistro(d); 
+                operando_num = stoi(o); 
+            }
+        }
+
+        // Inyectar los datos traducidos en la fila correspondiente de la RAM
+        RAM[i][0] = opcode_num;
+        RAM[i][1] = operando_num;
+    }
+
+    // Cortafuegos: Si el usuario lleno las 128 lineas, forzar un HLT al final por seguridad
+    if (programaTxt.size() == 128) {
+        RAM[127][0] = 0;
+        RAM[127][1] = 0;
     }
 }
 
 
 //000000000000000000000000000000000
-// Main
+// Main (Modo Pruebas y Desensamblador)
 //000000000000000000000000000000000
 
 int main() {
-    menuPrincipal(); // Iniciar programa desde el menu
+    cout << "--- CPU: FASE DE ENSAMBLADO ---" << endl;
+    cout << "Escribe tu codigo. Termina con HLT." << endl;
+    
+    // Paso 1: Leer y validar el codigo ingresado por el usuario
+    paso1_Lectura();
+
+    // Si todo salio bien, proceder a ensamblar en la RAM
+    if (isRunning) {
+        paso2_Ensamblado();
+        cout << "\n--- RAM ---" << endl;
+        
+        // Imprimir vista previa de la RAM combinando la instruccion original del usuario
+        for(int i = 0; i < 5; i++) {
+            if (i < programaTxt.size()) {
+                cout << "RAM[" << i << "] -> " << programaTxt[i] << endl;
+            } else {
+                // Si la linea esta vacia, mostrar 0 (relleno de seguridad)
+                cout << "RAM[" << i << "] -> 0" << endl;
+            }
+        }
+    }
+
     return 0;
 }
