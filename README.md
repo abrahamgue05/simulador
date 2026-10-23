@@ -2,8 +2,6 @@
 
 Simulador educativo de una CPU de 8 bits escrito en C++17. El programa lee instrucciones de un ensamblador sencillo, las valida, las convierte a códigos numéricos y las ejecuta mediante un ciclo de **búsqueda, decodificación y ejecución** (*Fetch–Decode–Execute*).
 
-Muestra un panel de estado después de cada instrucción ejecutada. La versión `Simulador_CPU_principiante_comentado_sleep.cpp` espera **5 segundos** después de cada impresión para que sea más fácil observar los cambios.
-
 ---
 
 ## ⚙️ Arquitectura simulada
