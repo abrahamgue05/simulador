@@ -1,140 +1,130 @@
-// Permite mostrar mensajes en pantalla con cout y leer texto con cin/getline.
-#include <iostream>
-// Permite utilizar el tipo string para guardar instrucciones y operandos como texto.
-#include <string>
-// Biblioteca para representar bits; se conserva entre las bibliotecas permitidas.
-// En esta version no se utiliza directamente.
-#include <bitset>
-// Permite dar formato a los numeros que se muestran, por ejemplo con setprecision.
-#include <iomanip>
-// Permiten pausar la ejecucion durante un tiempo sin bloquear manualmente el programa.
-#include <thread>
+#include <iostream>// cout, cin y getline.
+#include <string>// String como texto. 
+#include <iomanip>// Belleza
+#include <thread>// Mensaje cada 5 segundos.
 #include <chrono>
 
-// Evita escribir std:: antes de cout, string, endl, etc.
-using namespace std;
+using namespace std;// Eliminar std
 
-// Memoria total: 256 posiciones.
-// Las posiciones 0-127 son para instrucciones.
-// Las posiciones 128-255 son para datos.
-// Cantidad total de posiciones de memoria RAM simulada.
-const int TAM_RAM = 256;
-// La zona de instrucciones tiene espacio para 128 instrucciones (indices 0 a 127).
-const int MAX_INSTRUCCIONES = 128;
-// La zona de datos comienza en la posicion fisica 128.
-const int INICIO_DATOS = 128;
+// 000000000
+// Variables
+// 000000000 
 
-// RAM es una tabla de 256 filas y 2 columnas.
-// En instrucciones, columna 0 guarda el codigo de operacion y columna 1 el operando.
-// Para datos, se usa principalmente la columna 0 para guardar el valor.
-// = {} inicializa todos los espacios en cero.
-int RAM[TAM_RAM][2] = {};
 
-// Arreglo de registros generales: posicion 0 = AX, 1 = BX y 2 = CX.
-// Todos empiezan en cero.
+// RAM de 256 posiciones. Las instrucciones ocupan 0-127 y los datos 128-255.
+int RAM[256][2] = {};
 int registros[3] = {0, 0, 0}; // 0=AX, 1=BX, 2=CX
-// PC (Program Counter): indica el indice de la siguiente instruccion que se ejecutara.
-int PC = 0;
-// MAR (Memory Address Register): guarda la direccion de memoria consultada.
-int MAR = 0;
-// MDR (Memory Data Register): guarda el dato leido de memoria.
-int MDR = 0;
-// IR: registro de instruccion. IR_OpCode guarda el codigo de la instruccion actual.
-int IR_OpCode = 0;
-// IR_Operando guarda el valor o la direccion asociada a la instruccion actual.
-int IR_Operando = 0;
-// BP (Base Pointer): referencia usada para representar la base de la pila.
-int BP = 248;
-// SP (Stack Pointer): apunta al espacio superior disponible de la pila.
-int SP = 255;
+int pila[128] = {}; // Almacenamiento independiente para que PUSH/POP no sobrescriban los datos de RAM.
 
-// Banderas: 0=Z, 1=N, 2=C, 3=O (desbordamiento)
-// Arreglo de banderas: Z = cero, N = negativo, C = acarreo y O = desbordamiento.
-// Cada bandera utiliza 0 (falsa) o 1 (verdadera).
-int banderas[4] = {0, 0, 0, 0};
 
-// Estructura sencilla para guardar una instruccion antes de convertirla a codigo numerico.
-struct Instruccion {
-    // Nombre de la operacion, por ejemplo MOV, DIV o HLT.
+int PC = 0;// PC (Program Counter): indica el indice de la siguiente instruccion que se ejecutara.
+int MAR = 0;// MAR (Memory Address Register): guarda la direccion de memoria consultada.
+int MDR = 0;// MDR (Memory Data Register): guarda el dato leido de memoria.
+int IR_OpCode = 0;// IR: registro de instruccion. IR_OpCode guarda el codigo de la instruccion actual.
+int IR_Operando = 0;// IR_Operando guarda el valor o la direccion asociada a la instruccion actual.
+int SP = 255;// SP (Stack Pointer): apunta al espacio superior disponible de la pila.
+
+int banderas[4] = {0, 0, 0, 0};// Arreglo de banderas: Z = cero, N = negativo, C = acarreo y O = desbordamiento.
+
+struct Instruccion {// Estructura sencilla para guardar una instruccion.
     string op;
-    // Primer operando: suele ser el registro o la direccion de destino.
     string destino;
-    // Segundo operando: suele ser el valor, registro o direccion de origen.
     string origen;
 };
 
-// Arreglo donde se guarda el programa escrito por el usuario, ya separado en instrucciones.
-Instruccion programa[MAX_INSTRUCCIONES];
-// Numero de instrucciones validas que se han leido.
-int cantidadInstrucciones = 0;
-// Se vuelve true si ocurre un error mientras se ejecuta la CPU.
+
+Instruccion programa[128];// Arreglo instrucciones
+int cantidadInstrucciones = 0;// Instrucciones validas
 bool errorEjecucion = false;
 
-// Convierte letras minusculas a mayusculas y cambia las comas por espacios.
-// Asi MOV ax, 5 y mov AX 5 se pueden procesar de manera similar.
-string mayusculas(string texto) {
+
+string mayusculas(string texto) {// Minusculas a mayusculas / Comas por espacios.
     for (int i = 0; i < (int)texto.length(); i++) {
         if (texto[i] >= 'a' && texto[i] <= 'z') {
-            texto[i] = texto[i] - 'a' + 'A';
+            texto[i] = texto[i] - 'a' + 'A';// Letra - su valor en alfabeto + valor A mayuscula en alfabeto
         }
         if (texto[i] == ',') texto[i] = ' ';
     }
     return texto;
 }
 
-// Elimina comentarios que comiencen con ; o //.
-// Solo se conserva el texto que aparece antes del marcador de comentario.
-string quitarComentarios(string linea) {
-    int pos = (int)linea.find(';');
-    int pos2 = (int)linea.find("//");
-    if (pos == -1 || (pos2 != -1 && pos2 < pos)) pos = pos2;
-    if (pos != -1) linea = linea.substr(0, pos);
-    return linea;
+// Comprueba separadores habituales.
+bool esEspacio(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
 }
 
-// Divide una linea en palabras separadas por espacios.
-// Ejemplo: "MOV AX 5" se convierte en tres tokens: MOV, AX y 5.
-// Devuelve cuantas palabras se guardaron en el arreglo tokens.
+// Devuelve true si la linea esta vacia o solo tiene espacios.
+bool lineaVacia(string linea) {
+    for (int i = 0; i < (int)linea.length(); i++) {
+        if (!esEspacio(linea[i])) return false;
+    }
+    return true;
+}
+
+// Divide una linea en palabras. Tambien cuenta las palabras que exceden maxTokens
+// para que una instruccion con operandos extra no sea aceptada por accidente.
 int separarTokens(string linea, string tokens[], int maxTokens) {
     int cantidad = 0;
     int i = 0;
     while (i < (int)linea.length()) {
-        while (i < (int)linea.length() && linea[i] == ' ') i++;
+        while (i < (int)linea.length() && esEspacio(linea[i])) i++;
         if (i >= (int)linea.length()) break;
+
         string palabra = "";
-        while (i < (int)linea.length() && linea[i] != ' ') {
+        while (i < (int)linea.length() && !esEspacio(linea[i])) {
             palabra += linea[i];
             i++;
         }
-        if (cantidad < maxTokens) {
-            tokens[cantidad] = palabra;
-            cantidad++;
-        }
+
+        if (cantidad < maxTokens) tokens[cantidad] = palabra;
+        cantidad++;
     }
     return cantidad;
 }
 
-// Intenta convertir un texto a un numero entero decimal.
-// Acepta numeros positivos, negativos y un signo + opcional.
-// Devuelve true si todo el texto es un numero valido; si no, devuelve false.
-// El simbolo & permite guardar el numero convertido en la variable original.
 bool convertirNumero(string texto, int &numero) {
+    // Convierte un texto a numero entero. Si no es valido, devuelve false.
     if (texto.length() == 0) return false;
+
     int signo = 1;
     int i = 0;
+
     if (texto[0] == '-') {
         signo = -1;
         i = 1;
     } else if (texto[0] == '+') {
         i = 1;
     }
+
     if (i == (int)texto.length()) return false;
-    numero = 0;
+
+ 
+    long long valor = 0;
+    long long limite = 2147483647LL;
+
+    if (signo == -1) limite = 2147483648LL;
+
     for (; i < (int)texto.length(); i++) {
         if (texto[i] < '0' || texto[i] > '9') return false;
-        numero = numero * 10 + texto[i] - '0';
+
+        int digito = texto[i] - '0';
+
+        // Comprobamos el limite antes de agregar el siguiente digito.
+        if (valor > (limite - digito) / 10) return false;
+
+        valor = valor * 10 + digito;
     }
-    numero *= signo;
+
+    if (signo == -1) {
+        if (valor == 2147483648LL) {
+            numero = -2147483647 - 1;
+        } else {
+            numero = -(int)valor;
+        }
+    } else {
+        numero = (int)valor;
+    }
+
     return true;
 }
 
@@ -168,15 +158,6 @@ int idRegistro(string texto) {
     return 0;
 }
 
-// Convierte el identificador numerico de un registro a su nombre.
-// Esta funcion puede servir para mostrar el nombre en mensajes.
-string nombreRegistro(int id) {
-    if (id == 1) return "AX";
-    if (id == 2) return "BX";
-    if (id == 3) return "CX";
-    return "?";
-}
-
 // Lee un registro usando su identificador AX=1, BX=2 o CX=3.
 // Si el identificador no es valido, devuelve cero como valor de seguridad.
 int leerRegistro(int id) {
@@ -193,15 +174,13 @@ void escribirRegistro(int id, int valor) {
 }
 
 // Convierte una direccion logica hexadecimal a una direccion fisica.
-// Por ejemplo: 002 -> 2 + 128 = RAM[130].
-// Interpreta una direccion logica hexadecimal y calcula su direccion fisica.
-// Acepta formatos como 00A, [00A] o 0x00A.
-// Solo se permiten direcciones logicas de 000 a 07F (0 a 127).
-// Se suma INICIO_DATOS (128) para llegar a la zona de datos de RAM.
 bool direccionMemoria(string texto, int &direccionFisica) {
-    if (texto.length() >= 3 && texto[0] == '[' && texto[texto.length() - 1] == ']') {
+    // Primero quita los corchetes, si existen.
+    if (texto.length() >= 2 && texto[0] == '[' && texto[texto.length() - 1] == ']') {
         texto = texto.substr(1, texto.length() - 2);
-    } else if (texto.length() > 2 && texto[0] == '0' && texto[1] == 'X') {
+    }
+    // Despues quita el prefijo hexadecimal, si existe; asi tambien acepta [0X05].
+    if (texto.length() > 2 && texto[0] == '0' && (texto[1] == 'X' || texto[1] == 'x')) {
         texto = texto.substr(2);
     }
 
@@ -217,20 +196,18 @@ bool direccionMemoria(string texto, int &direccionFisica) {
         valor = valor * 16 + digito;
     }
     if (valor < 0 || valor > 127) return false;
-    direccionFisica = INICIO_DATOS + valor;
+    direccionFisica = 128 + valor;
     return true;
 }
 
 // Detecta si el usuario marco una direccion de forma explicita con [ ] o 0x.
 bool esDireccionExplicita(string texto) {
     return (texto.length() >= 3 && texto[0] == '[' && texto[texto.length()-1] == ']') ||
-           (texto.length() > 2 && texto[0] == '0' && texto[1] == 'X');
+           (texto.length() > 2 && texto[0] == '0' && (texto[1] == 'X' || texto[1] == 'x'));
 }
 
 // Decide si un operando de origen debe interpretarse como una direccion de memoria.
-// Las direcciones con letras hexadecimales A-F se reconocen automaticamente.
-// Los numeros solo con digitos, como 010, se interpretan como valores inmediatos,
-// salvo que se escriban entre corchetes o con el prefijo 0x.
+
 bool esDireccionFuente(string texto) {
     int direccion;
     if (esDireccionExplicita(texto)) return direccionMemoria(texto, direccion);
@@ -243,10 +220,8 @@ bool esDireccionFuente(string texto) {
 }
 
 // Revisa una linea escrita por el usuario y comprueba que la instruccion sea valida.
-// Si es valida, llena el objeto ins. Si no, explica el problema en error.
-// Devuelve false cuando la linea esta vacia o contiene una instruccion invalida.
 bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
-    linea = mayusculas(quitarComentarios(linea));
+    linea = mayusculas(linea);
     string tokens[4];
     int n = separarTokens(linea, tokens, 4);
     if (n == 0) return false;
@@ -257,14 +232,20 @@ bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
 
     // HLT detiene la CPU. Tambien se acepta 0 como forma equivalente.
     if (ins.op == "HLT" || ins.op == "0") {
-        if (n != 1) { error = "HLT no acepta operandos."; return false; }
+        if (n != 1) {
+            error = "HLT no acepta operandos.";
+            return false;
+        }
         ins.op = "HLT";
         return true;
     }
 
     // MOV copia un valor, un registro o un dato de memoria a un destino.
     if (ins.op == "MOV") {
-        if (n != 3) { error = "MOV necesita dos operandos."; return false; }
+        if (n != 3) {
+            error = "MOV necesita dos operandos.";
+            return false;
+        }
         if (esRegistro(ins.destino) && esRegistro(ins.origen)) return true;
         int direccion, numero;
         if (esRegistro(ins.destino) && esDireccionFuente(ins.origen)) {
@@ -272,7 +253,8 @@ bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
         }
         if (esRegistro(ins.destino) && convertirNumero(ins.origen, numero)) {
             if (numero >= -128 && numero <= 127) return true;
-            error = "El valor de MOV debe estar entre -128 y 127."; return false;
+            error = "El valor de MOV debe estar entre -128 y 127.";
+            return false;
         }
         if (direccionMemoria(ins.destino, direccion) && esRegistro(ins.origen)) return true;
         error = "Operandos invalidos para MOV."; return false;
@@ -289,7 +271,10 @@ bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
     // CMP compara un registro con un valor o dato de memoria y actualiza las banderas.
     if (ins.op == "CMP") {
         int direccion, numero;
-        if (n != 3 || !esRegistro(ins.destino)) { error = "CMP necesita un registro y un valor."; return false; }
+        if (n != 3 || !esRegistro(ins.destino)) {
+            error = "CMP necesita un registro y un valor.";
+            return false;
+        }
         if (esDireccionFuente(ins.origen) && direccionMemoria(ins.origen, direccion)) return true;
         if (convertirNumero(ins.origen, numero) && numero >= -128 && numero <= 127) return true;
         error = "Valor invalido para CMP."; return false;
@@ -298,7 +283,7 @@ bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
     // JMP salta siempre al indice indicado; JMA salta si la bandera Z vale 1.
     if (ins.op == "JMP" || ins.op == "JMA") {
         int destino;
-        if (n != 2 || !convertirNumero(ins.destino, destino) || destino < 0 || destino >= MAX_INSTRUCCIONES) {
+        if (n != 2 || !convertirNumero(ins.destino, destino) || destino < 0 || destino >= 128) {
             error = "El salto debe tener un indice entre 0 y 127."; return false;
         }
         return true;
@@ -315,7 +300,10 @@ bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
 
     // PUSH guarda un registro en la pila; POP recupera el ultimo valor guardado.
     if (ins.op == "PUSH" || ins.op == "POP") {
-        if (n != 2 || !esRegistro(ins.destino)) { error = ins.op + " solo acepta AX, BX o CX."; return false; }
+        if (n != 2 || !esRegistro(ins.destino)) {
+            error = ins.op + " solo acepta AX, BX o CX.";
+            return false;
+        }
         return true;
     }
 
@@ -331,13 +319,13 @@ bool leerPrograma() {
     cout << "Escribe las instrucciones y termina con HLT." << endl;
 
     // Se leen como maximo 128 instrucciones para no salir del arreglo programa.
-    while (cantidadInstrucciones < MAX_INSTRUCCIONES) {
+    while (cantidadInstrucciones < 128) {
         string linea;
         if (!getline(cin, linea)) break;
         Instruccion ins;
         string error;
         if (!analizarInstruccion(linea, ins, error)) {
-            if (quitarComentarios(linea).find_first_not_of(" \t\r\n") == string::npos) continue;
+            if (lineaVacia(linea)) continue;
             cout << "Error en la instruccion: " << error << endl;
             return false;
         }
@@ -354,11 +342,11 @@ bool leerPrograma() {
         hlt.op = "HLT";
         hlt.destino = "";
         hlt.origen = "";
-        if (cantidadInstrucciones < MAX_INSTRUCCIONES) {
+        if (cantidadInstrucciones < 128) {
             programa[cantidadInstrucciones] = hlt;
             cantidadInstrucciones++;
         } else {
-            programa[MAX_INSTRUCCIONES - 1] = hlt;
+            programa[128 - 1] = hlt;
             cout << "[!] La instruccion del indice 127 se reemplazo por HLT." << endl;
         }
     }
@@ -367,8 +355,8 @@ bool leerPrograma() {
     for (int i = 0; i < cantidadInstrucciones; i++) {
         if (programa[i].op == "JMP" || programa[i].op == "JMA") {
             int destino;
-            convertirNumero(programa[i].destino, destino);
-            if (destino >= cantidadInstrucciones) {
+            if (!convertirNumero(programa[i].destino, destino) ||
+                destino < 0 || destino >= cantidadInstrucciones) {
                 cout << "Error: el salto apunta fuera del programa." << endl;
                 return false;
             }
@@ -380,7 +368,7 @@ bool leerPrograma() {
 // Convierte las instrucciones de texto a codigos numericos que la CPU puede ejecutar.
 // Cada instruccion ocupa una fila de RAM: codigo en columna 0 y operando en columna 1.
 void ensamblarPrograma() {
-    for (int i = 0; i < TAM_RAM; i++) {
+    for (int i = 0; i < 256; i++) {
         RAM[i][0] = 0;
         RAM[i][1] = 0;
     }
@@ -397,58 +385,57 @@ void ensamblarPrograma() {
         if (ins.op == "HLT") codigo = 0;
         else if (ins.op == "MOV") {
             if (esRegistro(ins.destino) && esRegistro(ins.origen)) {
-                codigo = 40 + reg;
+                codigo = 40 + reg;// MOV registro, registro
                 operando = idRegistro(ins.origen);
             } else if (esRegistro(ins.destino) && esDireccionFuente(ins.origen)) {
                 direccionMemoria(ins.origen, direccion);
-                codigo = 20 + reg;
+                codigo = 20 + reg;// MOV registro, dato de memoria
                 operando = direccion;
             } else if (esRegistro(ins.destino)) {
                 convertirNumero(ins.origen, numero);
-                codigo = 10 + reg;
+                codigo = 10 + reg;// MOV registro, valor inmediato
                 operando = byteSinSigno(numero);
             } else {
                 direccionMemoria(ins.destino, direccion);
-                codigo = 30 + idRegistro(ins.origen);
+                codigo = 30 + idRegistro(ins.origen);// MOV direccion_de_memoria, registro
                 operando = direccion;
             }
         } else if (ins.op == "DIV") {
             if (esRegistro(ins.destino)) {
                 convertirNumero(ins.origen, numero);
-                codigo = 50 + reg;
+                codigo = 50 + reg;// DIV registro, valor inmediato
                 operando = byteSinSigno(numero);
             } else {
                 direccionMemoria(ins.destino, direccion);
-                codigo = 60;
+                codigo = 60;// DIV AX, dato de memoria
                 operando = direccion;
             }
         } else if (ins.op == "CMP") {
             if (esDireccionFuente(ins.origen)) {
                 direccionMemoria(ins.origen, direccion);
-                codigo = 80 + reg;
+                codigo = 80 + reg;// CMP registro, dato de memoria
                 operando = direccion;
             } else {
                 convertirNumero(ins.origen, numero);
-                codigo = 70 + reg;
+                codigo = 70 + reg;// CMP registro, valor inmediato
                 operando = byteSinSigno(numero);
             }
-        } else if (ins.op == "JMP") {
+        } else if (ins.op == "JMP") {// Salto incondicional
             convertirNumero(ins.destino, numero); codigo = 90; operando = numero;
-        } else if (ins.op == "JMA") {
+        } else if (ins.op == "JMA") {// Salto condicional si Z=1
             convertirNumero(ins.destino, numero); codigo = 91; operando = numero;
-        } else if (ins.op == "SHL") {
+        } else if (ins.op == "SHL") {// Desplazamiento de bits a la izquierda
             convertirNumero(ins.origen, numero); codigo = 100 + reg; operando = numero;
-        } else if (ins.op == "PUSH") codigo = 110 + reg;
-        else if (ins.op == "POP") codigo = 120 + reg;
+        } else if (ins.op == "PUSH") codigo = 110 + reg;// Guarda el registro en la pila
+        else if (ins.op == "POP") codigo = 120 + reg;// Recupera el registro de la pila
 
+        // Guarda el codigo y su operando en la RAM.
         RAM[i][0] = codigo;
         RAM[i][1] = operando;
     }
 }
 
 // Actualiza las banderas Z, N, C y O a partir de un resultado aritmetico.
-// Z: resultado de 8 bits igual a cero. N: bit mas significativo encendido.
-// C: acarreo recibido como parametro. O: resultado fuera del rango -128 a 127.
 void actualizarFlags(int resultado, int acarreo = 0) {
     int byte = byteSinSigno(resultado);
     banderas[0] = (byte == 0);
@@ -457,15 +444,17 @@ void actualizarFlags(int resultado, int acarreo = 0) {
     banderas[3] = (resultado < -128 || resultado > 127);
 }
 
-// Actualiza las banderas despues de comparar/restar a - b.
-// No guarda el resultado en un registro: solo modifica las banderas de comparacion.
 void actualizarFlagsResta(int a, int b) {
+    // Simula la resta a - b y actualiza las banderas sin guardar el resultado.
     int resultado = a - b;
-    int byte = byteSinSigno(resultado);
-    banderas[0] = (byte == 0);
-    banderas[1] = (byte >= 128);
-    banderas[2] = (byteSinSigno(a) < byteSinSigno(b));
-    banderas[3] = (((a ^ b) & (a ^ resultado) & 128) != 0);
+    int resultadoByte = byteSinSigno(resultado);
+    int aByte = byteSinSigno(a);
+    int bByte = byteSinSigno(b);
+
+    banderas[0] = (resultadoByte == 0); // Z: el resultado es cero.
+    banderas[1] = (resultadoByte >= 128); // N: el bit de signo esta encendido.
+    banderas[2] = (aByte < bByte); // C: hubo un prestamo en la resta.
+    banderas[3] = (resultado < -128 || resultado > 127); // O: resultado fuera del rango con signo.
 }
 
 // Muestra el estado actual de la CPU: registros internos, banderas, registros y pila.
@@ -484,7 +473,7 @@ void imprimirDashboard() {
          << " | C: " << banderas[2] << " | O: " << banderas[3] << endl;
     cout << "AX: " << registros[0] << " | BX: " << registros[1]
          << " | CX: " << registros[2] << endl;
-    cout << "BP: " << BP << " | SP: " << SP << " | Uso de Pila: "
+    cout << "SP: " << SP << " | Uso de Pila: "
          << fixed << setprecision(1) << uso << "%" << endl;
     cout << "--------------------------------------------------" << endl;
 }
@@ -494,7 +483,7 @@ void imprimirDashboard() {
 void ejecutarPrograma() {
     bool ejecutando = true;
     while (ejecutando) {
-        if (PC < 0 || PC >= cantidadInstrucciones || PC >= MAX_INSTRUCCIONES) {
+        if (PC < 0 || PC >= cantidadInstrucciones || PC >= 128) {
             cout << "Error: PC fuera del rango del programa." << endl;
             errorEjecucion = true;
             break;
@@ -564,21 +553,30 @@ void ejecutarPrograma() {
         } else if (familia == 10) {
             int cantidad = IR_Operando;
             int antes = leerRegistro(reg);
+
             if (cantidad > 0) {
-                int byte = byteSinSigno(antes);
-                banderas[2] = (byte >> (8 - cantidad)) & 1;
-                int resultado = byte * (1 << cantidad);
+                int valorByte = byteSinSigno(antes);
+                int resultado = antes;
+
+                // Movemos un bit a la vez para que sea mas facil seguir el proceso.
+                for (int i = 0; i < cantidad; i++) {
+                    if (valorByte >= 128) banderas[2] = 1;
+                    else banderas[2] = 0;
+
+                    valorByte = byteSinSigno(valorByte * 2);
+                    resultado = resultado * 2;
+                }
+
                 escribirRegistro(reg, resultado);
                 actualizarFlags(resultado, banderas[2]);
             }
         // Familia 11: PUSH, guarda el registro en la posicion actual de la pila.
         } else if (familia == 11) {
-            if (SP < INICIO_DATOS) {
+            if (SP < 128) {
                 cout << "Error: pila llena." << endl;
                 errorEjecucion = true; break;
             }
-            RAM[SP][0] = byteSinSigno(leerRegistro(reg));
-            RAM[SP][1] = 0;
+            pila[SP - 128] = byteSinSigno(leerRegistro(reg));
             SP--;
         // Familia 12: POP, recupera el valor que esta en la cima de la pila.
         } else if (familia == 12) {
@@ -587,10 +585,10 @@ void ejecutarPrograma() {
                 errorEjecucion = true; break;
             }
             SP++;
-            escribirRegistro(reg, byteConSigno(RAM[SP][0]));
+            escribirRegistro(reg, byteConSigno(pila[SP - 128]));
         // Codigo 90: JMP; cambia PC siempre al indice indicado.
         } else if (IR_OpCode == 90) {
-            if (IR_Operando >= cantidadInstrucciones) {
+            if (IR_Operando < 0 || IR_Operando >= cantidadInstrucciones) {
                 cout << "Error: salto JMP fuera de rango." << endl;
                 errorEjecucion = true; break;
             }
@@ -598,7 +596,7 @@ void ejecutarPrograma() {
         // Codigo 91: JMA; solo salta si Z=1, es decir, si la comparacion dio igualdad.
         } else if (IR_OpCode == 91) {
             if (banderas[0] == 1) {
-                if (IR_Operando >= cantidadInstrucciones) {
+                if (IR_Operando < 0 || IR_Operando >= cantidadInstrucciones) {
                     cout << "Error: salto JMA fuera de rango." << endl;
                     errorEjecucion = true; break;
                 }
@@ -624,8 +622,9 @@ void ejecutarPrograma() {
 // Punto de entrada del programa: aqui comienza la ejecucion del simulador.
 int main() {
     cout << "--- SIMULADOR DE CPU ---" << endl;
-    cout << "Memoria: 256 posiciones. Instrucciones: 0-127. Datos: 128-255." << endl;
+    cout << "RAM: 256 posiciones. Instrucciones: 0-127. Datos: 128-255." << endl;
     cout << "Direcciones de datos 000-07F se desplazan sumando 128." << endl;
+    cout << "La pila tiene 128 espacios independientes de la RAM de datos." << endl;
 
     // Primero se leen y validan las instrucciones escritas por el usuario.
     if (!leerPrograma()) {
@@ -638,5 +637,6 @@ int main() {
     cout << "\nPrograma ensamblado. Iniciando CPU...\n" << endl;
     // Finalmente, se ejecuta el programa instruccion por instruccion.
     ejecutarPrograma();
-    return errorEjecucion ? 1 : 0;
+    if (errorEjecucion) return 1;
+    return 0;
 }
