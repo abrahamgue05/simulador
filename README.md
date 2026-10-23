@@ -4,8 +4,6 @@ Simulador educativo de una CPU de 8 bits escrito en C++17. El programa lee instr
 
 Muestra un panel de estado después de cada instrucción ejecutada. La versión `Simulador_CPU_principiante_comentado_sleep.cpp` espera **5 segundos** después de cada impresión para que sea más fácil observar los cambios.
 
-> **Alcance:** es una simulación educativa; no emula un procesador comercial específico ni implementa una MMU física. La traducción de direcciones de datos es una regla sencilla del simulador.
-
 ---
 
 ## ⚙️ Arquitectura simulada
@@ -25,7 +23,7 @@ Las direcciones lógicas de datos van de `000` a `07F` en hexadecimal (0–127 e
 - `002` → `RAM[130]`
 - `07F` → `RAM[255]`
 
-Para indicar una dirección de memoria, se recomienda escribirla entre corchetes, por ejemplo `MOV AX, [002]`. También se aceptan direcciones con prefijo `0x`, como `MOV AX, 0x002`. Los números de origen que solo contienen dígitos, como `002`, se interpretan como valores inmediatos, no como direcciones, salvo que se escriban entre corchetes o con `0x`.
+Para indicar una dirección de memoria, se recomienda escribirla entre corchetes, por ejemplo `MOV AX, [002]`.
 
 ### Registros generales
 
@@ -34,8 +32,6 @@ Los registros almacenan valores de 8 bits interpretados con signo, entre **-128 
 - `AX`: acumulador principal.
 - `BX`: registro general secundario.
 - `CX`: registro general auxiliar.
-
-Los valores fuera de ese rango se ajustan al comportamiento de un byte de 8 bits cuando se guardan en un registro.
 
 ### Registros de control mostrados
 
@@ -165,20 +161,3 @@ BP: 248 | SP: 255 | Uso de Pila: 0.0%
 Los valores del panel cambian a medida que se ejecuta el programa. En la versión con pausa, transcurren 5 segundos entre cada impresión y la siguiente instrucción continúa después de esa espera.
 
 ---
-
-## 🧪 Pruebas recomendadas
-
-1. **Todas las instrucciones:** prueba cada operación y verifica los registros y banderas.
-2. **HLT automático con menos de 128 instrucciones:** elimina `HLT` de un programa corto y comprueba que el simulador lo agregue.
-3. **Límite de 128 instrucciones:** introduce 128 instrucciones sin `HLT` y verifica que la instrucción del índice 127 se reemplace por `HLT`.
-4. **Memoria:** escribe un valor con `MOV [002], BX` y recupéralo con `MOV AX, [002]`.
-5. **Pila:** guarda un valor con `PUSH AX` y recupéralo con `POP BX`.
-6. **Errores:** prueba una división entre cero y verifica que la CPU se detenga con un mensaje de error.
-
----
-
-## 📌 Notas
-
-- El panel es una salida de texto en la terminal; no es una interfaz gráfica independiente.
-- El retardo de 5 segundos sirve para observar el estado paso a paso. Para cambiarlo, modifica `chrono::seconds(5)` en el archivo fuente.
-- La memoria, los registros, las banderas y la pila son estructuras de una simulación educativa, no componentes físicos reales.
