@@ -49,8 +49,6 @@ Las banderas se muestran después de cada instrucción:
 - `C` (*Carry*): indica acarreo en desplazamientos; en comparaciones se utiliza para señalar préstamo.
 - `O` (*Overflow*): indica desbordamiento del rango con signo de 8 bits, de -128 a 127.
 
-Las banderas no se actualizan de la misma manera con todas las instrucciones; por ejemplo, `CMP`, `DIV` y `SHL` tienen comportamientos específicos.
-
 ---
 
 ## 🛠️ Instrucciones soportadas
