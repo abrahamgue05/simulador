@@ -39,7 +39,7 @@ int BP = 248;
 uint8_t MAR = 0;
 uint8_t MDR = 0;
 
-// Banderas: Z (cero), N (negativo), C (acarreo), O (desbordamiento).
+// Banderas: Z (cero), N (negativo), C (acarreo/prestamo), V (overflow).
 bool FLAGS[4] = {false, false, false, false};
 
 bool isRunning = true;
@@ -530,8 +530,18 @@ void actualizarFlags(int resultadoMatematico, bool acarreo = false) {
     const uint8_t resultadoByte = codificarByte(resultadoMatematico);
     FLAGS[0] = (resultadoByte == 0); // Z: resultado de 8 bits igual a cero.
     FLAGS[1] = (resultadoByte >= 128); // N: bit mas significativo encendido.
-    FLAGS[2] = acarreo; // C: se calcula explicitamente para SHL; otros casos simplificados.
-    FLAGS[3] = (resultadoMatematico < -128 || resultadoMatematico > 127); // O
+    FLAGS[2] = acarreo; // C: acarreo o bit desplazado fuera del byte.
+    FLAGS[3] = (resultadoMatematico < -128 || resultadoMatematico > 127); // V: desbordamiento con signo.
+}
+
+// Actualiza las banderas para una resta sin guardar el resultado (CMP).
+void actualizarFlagsResta(int a, int b) {
+    const int resultado = a - b;
+    const uint8_t resultadoByte = codificarByte(resultado);
+    FLAGS[0] = (resultadoByte == 0);
+    FLAGS[1] = (resultadoByte >= 128);
+    FLAGS[2] = codificarByte(a) < codificarByte(b); // Prestamo.
+    FLAGS[3] = (((a ^ b) & (a ^ resultado) & 0x80) != 0); // Overflow con signo.
 }
 
 void imprimirDashboard() {
@@ -546,7 +556,7 @@ void imprimirDashboard() {
          << static_cast<int>(IR_Operando) << "]\n";
 
     cout << "Z: " << FLAGS[0] << " | N: " << FLAGS[1]
-         << " | C: " << FLAGS[2] << " | O: " << FLAGS[3] << "\n";
+         << " | C: " << FLAGS[2] << " | V: " << FLAGS[3] << "\n";
 
     cout << "AX: " << static_cast<int>(AX)
          << " | BX: " << static_cast<int>(BX)
@@ -645,13 +655,13 @@ void paso3_Ejecucion() {
             // CMP registro, inmediato. No guarda la resta, solo actualiza flags.
             const int valorRegistro = leerRegistro(regId);
             const int inmediato = convertirByteConSigno(IR_Operando);
-            actualizarFlags(valorRegistro - inmediato);
+            actualizarFlagsResta(valorRegistro, inmediato);
         } else if (familia == 8) {
             // CMP registro, memoria.
             const int direccion = IR_Operando;
             const int valorRegistro = leerRegistro(regId);
             const int valorMemoria = convertirByteConSigno(RAM[direccion][0]);
-            actualizarFlags(valorRegistro - valorMemoria);
+            actualizarFlagsResta(valorRegistro, valorMemoria);
         } else if (familia == 10) {
             // SHL registro, cantidad (0-7).
             const int cantidad = IR_Operando;
