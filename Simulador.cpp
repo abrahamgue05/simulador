@@ -1,5 +1,5 @@
 #include <iostream>// cout, cin y getline.
-#include <string>// String como texto. 
+#include <string>// String como texto.
 #include <iomanip>// Belleza
 #include <thread>// Mensaje cada 5 segundos.
 #include <chrono>
@@ -8,14 +8,12 @@ using namespace std;// Eliminar std
 
 // 000000000
 // Variables
-// 000000000 
-
+// 000000000
 
 // RAM de 256 posiciones. Las instrucciones ocupan 0-127 y los datos 128-255.
 int RAM[256][2] = {};
 int registros[3] = {0, 0, 0}; // 0=AX, 1=BX, 2=CX
 int pila[128] = {}; // Almacenamiento independiente para que PUSH/POP no sobrescriban los datos de RAM.
-
 
 int PC = 0;// PC (Program Counter): indica el indice de la siguiente instruccion que se ejecutara.
 int MAR = 0;// MAR (Memory Address Register): guarda la direccion de memoria consultada.
@@ -32,11 +30,9 @@ struct Instruccion {// Estructura sencilla para guardar una instruccion.
     string origen;
 };
 
-
 Instruccion programa[128];// Arreglo instrucciones
 int cantidadInstrucciones = 0;// Instrucciones validas
 bool errorEjecucion = false;
-
 
 string mayusculas(string texto) {// Minusculas a mayusculas / Comas por espacios.
     for (int i = 0; i < (int)texto.length(); i++) {
@@ -98,7 +94,6 @@ bool convertirNumero(string texto, int &numero) {
 
     if (i == (int)texto.length()) return false;
 
- 
     long long valor = 0;
     long long limite = 2147483647LL;
 
@@ -207,7 +202,6 @@ bool esDireccionExplicita(string texto) {
 }
 
 // Decide si un operando de origen debe interpretarse como una direccion de memoria.
-
 bool esDireccionFuente(string texto) {
     int direccion;
     if (esDireccionExplicita(texto)) return direccionMemoria(texto, direccion);
@@ -258,6 +252,13 @@ bool analizarInstruccion(string linea, Instruccion &ins, string &error) {
         }
         if (direccionMemoria(ins.destino, direccion) && esRegistro(ins.origen)) return true;
         error = "Operandos invalidos para MOV."; return false;
+    }
+
+    // AND, OR y XOR necesitan dos registros. El resultado se guarda en el primero.
+    if (ins.op == "AND" || ins.op == "OR" || ins.op == "XOR") {
+        if (n == 3 && esRegistro(ins.destino) && esRegistro(ins.origen)) return true;
+        error = ins.op + " necesita dos registros, por ejemplo: " + ins.op + " AX BX.";
+        return false;
     }
 
     // DIV divide un registro entre un numero o divide AX usando un dato de memoria.
@@ -400,6 +401,15 @@ void ensamblarPrograma() {
                 codigo = 30 + idRegistro(ins.origen);// MOV direccion_de_memoria, registro
                 operando = direccion;
             }
+        } else if (ins.op == "AND") {// AND bit a bit entre dos registros
+            codigo = 130 + reg;
+            operando = idRegistro(ins.origen);
+        } else if (ins.op == "OR") {// OR bit a bit entre dos registros
+            codigo = 140 + reg;
+            operando = idRegistro(ins.origen);
+        } else if (ins.op == "XOR") {// XOR bit a bit entre dos registros
+            codigo = 150 + reg;
+            operando = idRegistro(ins.origen);
         } else if (ins.op == "DIV") {
             if (esRegistro(ins.destino)) {
                 convertirNumero(ins.origen, numero);
@@ -444,6 +454,15 @@ void actualizarFlags(int resultado, int acarreo = 0) {
     banderas[3] = (resultado < -128 || resultado > 127);
 }
 
+// Las operaciones logicas actualizan Z y N. C y O se limpian a cero.
+void actualizarFlagsLogicas(int resultado) {
+    int byte = byteSinSigno(resultado);
+    banderas[0] = (byte == 0); // Z: el resultado es cero.
+    banderas[1] = (byte >= 128); // N: el bit 7 del resultado es 1.
+    banderas[2] = 0; // C: las operaciones logicas no generan acarreo.
+    banderas[3] = 0; // O: las operaciones logicas no generan desbordamiento.
+}
+
 void actualizarFlagsResta(int a, int b) {
     // Simula la resta a - b y actualiza las banderas sin guardar el resultado.
     int resultado = a - b;
@@ -474,7 +493,7 @@ void imprimirDashboard() {
     cout << "AX: " << registros[0] << " | BX: " << registros[1]
          << " | CX: " << registros[2] << endl;
     cout << "SP: " << SP << " | Uso de Pila: "
-         << fixed << setprecision(1) << uso << "%" << endl;
+         << fixed << setprecision(1) << uso << "%" << endl;//iomanip
     cout << "--------------------------------------------------" << endl;
 }
 
@@ -586,6 +605,24 @@ void ejecutarPrograma() {
             }
             SP++;
             escribirRegistro(reg, byteConSigno(pila[SP - 128]));
+        // Familias 13, 14 y 15: AND, OR y XOR entre dos registros.
+        } else if (familia == 13 || familia == 14 || familia == 15) {
+            if (IR_Operando < 1 || IR_Operando > 3) {
+                cout << "Error: registro invalido en operacion logica." << endl;
+                errorEjecucion = true; break;
+            }
+
+            // Convertimos los dos registros a valores de 0 a 255 para operar sus bits.
+            int valorA = byteSinSigno(leerRegistro(reg));
+            int valorB = byteSinSigno(leerRegistro(IR_Operando));
+            int resultado = 0;
+
+            if (familia == 13) resultado = valorA & valorB;      // AND
+            else if (familia == 14) resultado = valorA | valorB; // OR
+            else resultado = valorA ^ valorB;                   // XOR
+
+            escribirRegistro(reg, resultado);
+            actualizarFlagsLogicas(resultado);
         // Codigo 90: JMP; cambia PC siempre al indice indicado.
         } else if (IR_OpCode == 90) {
             if (IR_Operando < 0 || IR_Operando >= cantidadInstrucciones) {
