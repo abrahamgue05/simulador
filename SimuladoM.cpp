@@ -40,10 +40,10 @@
   -> ejecutarInstruccion() -> registros / memoriaDatos[] / pila[] / banderas.
 */
 
-#include <iostream>
-#include <string>
-#include <sstream>
-using namespace std;
+#include <iostream>// cout, cin y getline.
+#include <string>// Cadenas
+#include <sstream>// 
+using namespace std;// eliinar std
 
 /*
   Estas constantes establecen los limites que usan los arreglos. Se usan
@@ -175,7 +175,7 @@ string instruccionesValidas[CANTIDAD_INSTRUCCIONES_VALIDAS] = {
   alrededor de la linea 660). Consulta instruccionesValidas[] y devuelve true
   si encuentra una coincidencia exacta. Por eso se exige escribir MAYUSCULAS.
 */
-bool instruccionExiste(string nombre) {
+bool instruccionExiste(string nombre) {// Devuelve true si el nombre coincide con una instruccion valida.
     for (int i = 0; i < CANTIDAD_INSTRUCCIONES_VALIDAS; i++) {
         if (nombre == instruccionesValidas[i]) {
             return true;
@@ -680,7 +680,7 @@ bool ejecutarInstruccion(int direccionInstruccion) {
         idDestino = IR_OpCode - OP_MOV_MEM_REG;
         direccionDatos = IR_Operando;
         if (direccionDatos < 0 || direccionDatos >= TOTAL_DATOS) return informarErrorEjecucion("direccion de memoria invalida en MOV", direccionInstruccion);
-        MAR = TOTAL_INSTRUCCIONES + direccionDatos;
+        MAR = TOTAL_INSTRUCCIONES + direccionDatos;// 128 + valor de instruccion
         MDR = memoriaDatos[direccionDatos];
         registros[idDestino] = MDR;
         return true;
